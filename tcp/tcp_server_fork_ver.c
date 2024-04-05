@@ -42,8 +42,9 @@ void handle_client(int sock)
     close(sock);
 }
 
-int main()
+void tcp_server_process()
 {
+
     // sockfd: file descriptor for the socket on which the server will listen for connections
     // newsockfd: file descriptor for the socket that the server will use to communicate with a client
     int sockfd, newsockfd;
@@ -74,10 +75,9 @@ int main()
 
     // bind the socket to an address
     // sockfd : socket file descriptor
-    int sock_bind = bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr))
-
-        if (sock_bind < 0)
-            error("ERROR on binding");
+    // Attempt to bind the socket to the specified IP address and port
+    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+        error("ERROR on binding");
 
     // listen for connections on a socket : parameter : socket file descriptor, maximum number of connections that can be waiting
     listen(sockfd, 5);
@@ -117,5 +117,10 @@ int main()
     }
 
     close(sockfd);
+}
+
+int main()
+{
+    tcp_server_process();
     return 0;
 }
