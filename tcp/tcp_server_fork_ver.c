@@ -9,6 +9,12 @@
 #define PORT 12345
 #define BUFFER_SIZE 256
 
+/*
+    tcp server using fork :
+        * multi processing server
+        * 서버는 클라이언트와 통신하기 위해 새로운 프로세스를 생성한다.
+*/
+
 void error(const char *msg)
 {
     perror(msg);
@@ -90,7 +96,13 @@ void tcp_server_process()
     while (1)
     {
         // server accpets a connection request from a client
+        // 무한루프를 돌면서 클라이언트의 요청을 받는다.
         newsockfd = accept(sockfd, (struct sockaddr *)&client_addr, &clilen);
+
+        // 클라이언트의 요청이 들어왔을 때 tcp connection을 생성한다. 생성에 실패할 경우 에러 메시지를 출력한다.
+        // 클라이언트 요청이 없을 경우 accept 함수는 블록킹 상태로 대기한다.
+        // 즉, 위의 accpet 함수는 클라이언트의 요청이 들어올 때까지 대기하고, 요청이 들어오면 클라이언트와 통신하기 위한 새로운 소켓을 생성한다.
+  
         if (newsockfd < 0)
             error("ERROR on accept");
 
@@ -117,10 +129,4 @@ void tcp_server_process()
     }
 
     close(sockfd);
-}
-
-int main()
-{
-    tcp_server_process();
-    return 0;
 }

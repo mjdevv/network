@@ -5,9 +5,16 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h> // pthread library : 스레드 생성, 조인, 종료 등을 위한 함수들이 정의되어 있다.
 
 #define PORT 12345
 #define BUFFER_SIZE 256
+
+/*
+    tcp server using thread :
+        * 멀티 스레드를 사용해서 클라이언트와 통신하는 서버
+        * 서버는 클라이언트와 통신하기 위해 새로운 스레드를 생성한다.
+*/
 
 void error(const char *msg)
 {
@@ -15,34 +22,27 @@ void error(const char *msg)
     exit(1);
 }
 
-void handle_client(int sock)
-{
-    int n;
+// void *: generic pointer 형식은 스레드 
+void *handle_client(void *sock) {
+    int sockfd = *((int *)sock); // socket file descriptor에 dereferncing 접근 
+    free(sock); // free the dynamically allocated memory for the socket descriptor
+
     char buffer[BUFFER_SIZE];
+    bzero(buffer, BUFFER_SIZE);
+    ssize_t n = read(sockfd, buffer, BUFFER_SIZE - 1);
+    if (n < 0) error("ERROR reading from socket");
 
-    bzero(buffer, BUFFER_SIZE);              // bzero : fill buffer with 0
-    n = read(sock, buffer, BUFFER_SIZE - 1); // read message from client and store it in buffer
-
-    if (n < 0)
-        error("ERROR reading from socket");
     printf("Here is the message: %s\n", buffer);
 
-    // Send a message to the client
     char message[] = "Message Received";
-    int message_len = sizeof(message);
+    n = write(sockfd, message, sizeof(message));
+    if (n < 0) error("ERROR writing to socket");
 
-    // parameter : socket, message, message length
-    // returns : number of bytes sent. when error, returns -1
-    n = write(sock, message, message_len);
-
-    if (n < 0) // when error
-        error("ERROR writing to socket");
-
-    // close the socket. the connection is closed and file descriptor is deallocated
-    close(sock);
+    close(sockfd);
+    return NULL;
 }
 
-int main()
+void main()
 {
     // sockfd: file descriptor for the socket on which the server will listen for connections
     // newsockfd: file descriptor for the socket that the server will use to communicate with a client
@@ -50,9 +50,7 @@ int main()
 
     // socklen_t: data type used for socket length
     socklen_t clilen;
-
     struct sockaddr_in serv_addr, cli_addr; // sockaddr_in: structure containing an internet address
-    int pid;
 
     // Create a new socket.
     // socket is a system call that creates a new socket.
@@ -72,39 +70,41 @@ int main()
 
     // bind the socket to an address
     // sockfd : socket file descriptor
-    int sock_bind = bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr))
+    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+        error("ERROR on binding");
 
-        if (sock_bind < 0)
-            error("ERROR on binding");
-
-    // listen for connections on a socket
+    // listen for connections on a socket : maximum 5 connection이 가능하다.
     listen(sockfd, 5);
     clilen = sizeof(cli_addr);
 
     while (1)
     {
-        newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
+        // accept a connection on a socket : blocking call 
+        // server will block here until a client requests a connection
+        printf("Waiting for client connection...\n");
+        newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen); // returns a new file descriptor 
+
+        // 클라이언트의 요청이 들어오면 tcp connection을 생성한다.
         if (newsockfd < 0)
             error("ERROR on accept");
 
-        // Create a new process for each connection
-        pid = fork();
-        if (pid < 0)
-            error("ERROR on fork");
-        if (pid == 0)
-        {
-            // This is the child process
-            close(sockfd);
-            handle_client(newsockfd);
-            exit(0);
-        }
-        else
-        {
-            // This is the parent process
-            close(newsockfd);
+
+        printf("Client connected\n");
+        
+        // pointer to the socket file descriptor
+        int *new_sock = malloc(sizeof(int));
+
+        if (new_sock == NULL) error("ERROR allocating memory");
+        *new_sock = newsockfd;
+
+        // 스레드를 생성한다. 
+        pthread_t t_id;
+
+        // pthread_create : create a new thread
+        if (pthread_create(&t_id, NULL, handle_client, (void *)new_sock) < 0) {
+            error("ERROR creating thread");
         }
     }
 
     close(sockfd);
-    return 0;
 }
